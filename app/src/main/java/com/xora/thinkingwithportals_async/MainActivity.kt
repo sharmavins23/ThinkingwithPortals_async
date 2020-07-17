@@ -6,6 +6,7 @@ import android.graphics.Point
 import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -21,6 +22,7 @@ import com.google.ar.sceneform.ux.TransformableNode
 import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
+    // Fragment variables
     private lateinit var arFragment: ArFragment
 
     // ===== State tracking ========================================================================
@@ -29,11 +31,16 @@ class MainActivity : AppCompatActivity() {
     private var isTracking: Boolean = false
     private var isHitting: Boolean = false
     private lateinit var axisAnchor: Anchor
+
     // Variables for communication states
     private var isAxisPlaced: Boolean = false
     private var isReceiving: Boolean = false
 
-    // ===== Event Listening =======================================================================
+    // Variables for drawing state
+    private var isDrawing: Boolean = false
+    private var lines = ArrayList<Line>()
+
+    // ===== Event listening =======================================================================
 
     // Startup
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,16 +55,53 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Button listeners
-        placeButton.setOnClickListener { placeAxes() }
+        placeButton.setOnClickListener {
+            if (!isAxisPlaced) placeAxes() // Prevents double placement
+        }
+
+        drawButton.setOnTouchListener(object : View.OnTouchListener {
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (!isDrawing) {
+                            isDrawing = true
+                            lines.add(Line(arFragment))
+                            lines.last().addVertexClient()
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        isDrawing = false
+                    }
+                }
+                return true // Consume the event
+            }
+        })
+
+        deleteButton.setOnClickListener {
+            lines.forEach {
+                it.removeLine()
+            }
+
+            lines.clear() // Clear the list
+        }
+
+        undoButton.setOnClickListener {
+            lines.last().removeLine()
+            lines.remove(lines.last())
+        }
+
         commSwapButton.setOnClickListener {
             isReceiving = !isReceiving // Toggle receiving state
             updateCommColors()
-            updateCommunicationButtons()
+            updateDrawingButtons()
         }
 
         // Hiding our FABs for initial state
         showFab(false, placeButton)
         showFab(false, drawButton)
+        showFab(false, deleteButton)
+        showFab(false, undoButton)
         showFab(false, commSwapButton)
         showFab(false, communicateButton)
 
@@ -67,7 +111,8 @@ class MainActivity : AppCompatActivity() {
 
     // On frame update
     private fun onUpdate() {
-        if (!isAxisPlaced) { // In the PLACE AXES state...
+        // In the PLACE AXES state...
+        if (!isAxisPlaced) {
             updateTracking()
             // If the device can find a plane...
             if (isTracking) {
@@ -77,9 +122,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // In the DRAWING state...
+        if (isDrawing) {
+            lines.last().addVertexClient()
+        }
     }
 
-    // ===== State-Agnostic Functions ==============================================================
+    // ===== State-agnostic functions ==============================================================
 
     // Show or hide a passed in FAB
     private fun showFab(enabled: Boolean, fab: FloatingActionButton) {
@@ -92,15 +142,19 @@ class MainActivity : AppCompatActivity() {
     private fun updateCommColors() {
         if (isReceiving) { // Receiving state - Blue
             commSwapButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0078FF"))
-            communicateButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0078FF"))
+            communicateButton.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#0078FF"))
+            deleteButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0078FF"))
         } else { // Transmitting state - Orange
             commSwapButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FD6600"))
-            communicateButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FD6600"))
+            communicateButton.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#FD6600"))
+            deleteButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FD6600"))
         }
     }
 
     // Add a node to the scene
-    fun addNodeToScene(anchor: Anchor, model: ModelRenderable) {
+    private fun addAxisNodeToScene(anchor: Anchor, model: ModelRenderable) {
         // Create a (one time use) anchor node
         val anchorNode = AnchorNode(anchor)
 
@@ -110,9 +164,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         arFragment.arSceneView.scene.addChild(anchorNode) // Add the node to the scene
+        axisAnchor = anchor // Save the anchor for later use
     }
 
-    // ===== Place Objects State ===================================================================
+    // ===== Place objects state ===================================================================
 
     // Check camera's tracking state, returns true if tracking changes
     private fun updateTracking(): Boolean {
@@ -168,7 +223,8 @@ class MainActivity : AppCompatActivity() {
     // Private-r function to create the axes model
     private fun createAxesModelRenderableThenPlaceIt(anchor: Anchor) {
         // Poly.google.com axes model
-        val model = Uri.parse("https://poly.googleusercontent.com/downloads/c/fp/1594805866743956/3ryLFYBNHCF/czTDFVl1MhQ/axis.gltf")
+        val model =
+            Uri.parse("https://poly.googleusercontent.com/downloads/c/fp/1594805866743956/3ryLFYBNHCF/czTDFVl1MhQ/axis.gltf")
 
         // Do the thing!
         ModelRenderable.builder()
@@ -186,10 +242,9 @@ class MainActivity : AppCompatActivity() {
             .setRegistryId(model)
             .build()
             .thenAccept {
-                addNodeToScene(anchor, it)
+                addAxisNodeToScene(anchor, it)
 
                 // Update the button state!
-                axisAnchor = anchor
                 changePlaceToGameState()
             }
             .exceptionally {
@@ -203,7 +258,7 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    // ===== Game State ============================================================================
+    // ===== Game state ============================================================================
 
     // Changes the buttons and their placement to the proper game state
     private fun changePlaceToGameState() {
@@ -214,18 +269,21 @@ class MainActivity : AppCompatActivity() {
         showFab(false, placeButton)
         showFab(true, commSwapButton)
         showFab(true, communicateButton)
-        updateCommunicationButtons()
+        showFab(true, deleteButton)
+        updateDrawingButtons()
 
         // Update communication button colors
         updateCommColors()
     }
 
     // Changes visibility of buttons based on receiving state
-    private fun updateCommunicationButtons() {
+    private fun updateDrawingButtons() {
         if (isReceiving) { // Receiving state
             showFab(false, drawButton)
+            showFab(false, undoButton)
         } else { // Transmitting state
             showFab(true, drawButton)
+            showFab(true, undoButton)
         }
     }
 
