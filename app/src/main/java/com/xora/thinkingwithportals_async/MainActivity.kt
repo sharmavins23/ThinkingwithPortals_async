@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
                     MotionEvent.ACTION_DOWN -> {
                         if (!isDrawing) {
                             isDrawing = true
-                            lines.add(Line(arFragment))
+                            lines.add(Line(arFragment, axisAnchor))
                             lines.last().addVertexClient()
                         }
                         return true

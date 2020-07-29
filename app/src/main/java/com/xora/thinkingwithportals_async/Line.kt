@@ -4,6 +4,7 @@ import android.graphics.Color.WHITE
 import com.google.ar.core.Anchor
 import com.google.ar.core.Pose
 import com.google.ar.sceneform.AnchorNode
+import com.google.ar.sceneform.math.Vector3
 import com.google.ar.sceneform.rendering.Color
 import com.google.ar.sceneform.rendering.MaterialFactory
 import com.google.ar.sceneform.rendering.ModelRenderable
@@ -11,7 +12,7 @@ import com.google.ar.sceneform.rendering.ShapeFactory
 import com.google.ar.sceneform.ux.ArFragment
 import com.google.ar.sceneform.ux.TransformableNode
 
-class Line(private val arFragment: ArFragment) {
+class Line(private val arFragment: ArFragment, private val axisAnchor: Anchor) {
     // Fragment variables - Nulls are ignored at my own risk
     private val frame = arFragment.arSceneView.arFrame!!
     private val session = arFragment.arSceneView.session!!
@@ -59,6 +60,20 @@ class Line(private val arFragment: ArFragment) {
             it.setParent(null)
             it.renderable = null // Stop rendering
         }
+    }
+
+    // Returns the vector3 difference of a point's anchornode's anchor and the axis anchor.
+    private fun vectorDiff(pointAnchor: AnchorNode): Vector3 {
+        // Get poses
+        val axis = axisAnchor.pose
+        val point = pointAnchor.anchor!!.pose
+
+        // Calculate the vector difference
+        return Vector3(
+            point.tx() - axis.tx(),
+            point.ty() - axis.ty(),
+            point.tz() - axis.tz()
+        )
     }
 
     // ===== Client vertex creation ================================================================
