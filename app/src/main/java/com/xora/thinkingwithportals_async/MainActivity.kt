@@ -25,6 +25,10 @@ class MainActivity : AppCompatActivity() {
     // Fragment variables
     private lateinit var arFragment: ArFragment
 
+    // Network variables
+    private var sendURL: String = "http://vinsdev.ml/portals/send/"
+    private var receiveURL: String = "http://vinsdev.ml/portals/receive/"
+
     // ===== State tracking ========================================================================
 
     // Variables for starting object placement
@@ -165,6 +169,18 @@ class MainActivity : AppCompatActivity() {
 
         arFragment.arSceneView.scene.addChild(anchorNode) // Add the node to the scene
         axisAnchor = anchor // Save the anchor for later use
+    }
+
+    // Retrieve the latest drawing object and add it to our lines
+    private fun requestAssets() {
+        // Create a network request off the main thread
+        var requestTask: String = NetworkAsyncCall(
+            this@MainActivity,
+            receiveURL,
+            RequestHandler.GET
+        ).execute().get()!! // This should never be null
+
+        // Parse our information
     }
 
     // ===== Place objects state ===================================================================
